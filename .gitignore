@@ -1,0 +1,5 @@
+.venv/
+.vs/
+*.pyc
+*.pyo
+venv
