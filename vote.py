@@ -42,7 +42,7 @@ def clean(text):
     return " ".join(text.split())
 
 
-def parse_votes(lines, source, sep=",", case_sensitive=False, lenient=False):
+def parse_votes(lines, source, sep=",", *, case_sensitive=False, lenient=False):
     """Return a list of (voter, [choices]).
 
     Names are compared ignoring case unless case_sensitive is set; the first
@@ -62,8 +62,8 @@ def parse_votes(lines, source, sep=",", case_sensitive=False, lenient=False):
     ballots = []
     voters = set()
     spelling = {}  # normalized choice -> first spelling seen
-    for lineno, line in enumerate(lines, 1):
-        line = line.strip()
+    for lineno, raw_line in enumerate(lines, 1):
+        line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
         voter, colon, rest = line.partition(":")
@@ -115,7 +115,7 @@ def schulze(d, candidates):
             if i == k:
                 continue
             for j in candidates:
-                if j == i or j == k:
+                if j in {i, k}:
                     continue
                 p[i][j] = max(p[i][j], min(p[i][k], p[k][j]))
     wins = {a: sum(1 for b in candidates if a != b and p[a][b] > p[b][a]) for a in candidates}
@@ -136,7 +136,8 @@ class TieBreaker:
     def __init__(self, strength, seed=None):
         self.strength = strength
         self.seed = seed
-        self.rng = random.Random(seed) if seed is not None else None
+        # tie-breaking is not security-sensitive; a seedable PRNG is what we want
+        self.rng = random.Random(seed) if seed is not None else None  # ruff: ignore[suspicious-non-cryptographic-random-usage]
 
     @property
     def fallback(self):
@@ -266,7 +267,7 @@ def print_matrix(candidates, m):
     )
 
 
-def main():
+def parse_args():
     parser = argparse.ArgumentParser(description="Tally preferential votes.")
     parser.add_argument(
         "file",
@@ -312,16 +313,20 @@ def main():
         parser.error("separator must be a single character other than ':'")
     if args.seats < 1:
         parser.error("seats must be at least 1")
-    method = "stv" if args.method == "irv" else args.method
+    if args.file == "-" and sys.stdin.isatty():
+        parser.error("no input file given and standard input is a terminal")
+    return args
 
+
+def load_ballots(args):
+    """Read and validate the ballots; return (ballots, candidates)."""
+    options = {"case_sensitive": args.case_sensitive, "lenient": args.lenient}
     if args.file == "-":
-        if sys.stdin.isatty():
-            parser.error("no input file given and standard input is a terminal")
-        ballots = parse_votes(sys.stdin, "<stdin>", args.separator, args.case_sensitive, args.lenient)
+        ballots = parse_votes(sys.stdin, "<stdin>", args.separator, **options)
     else:
         try:
             with pathlib.Path(args.file).open(encoding="utf-8") as f:
-                ballots = parse_votes(f, args.file, args.separator, args.case_sensitive, args.lenient)
+                ballots = parse_votes(f, args.file, args.separator, **options)
         except OSError as e:
             sys.exit(f"error: {e}")
     if not ballots:
@@ -338,6 +343,13 @@ def main():
         for c in candidates:
             if appearances[c] == 1:
                 warn(f"'{c}' appears on only one ballot (typo?)")
+    return ballots, candidates
+
+
+def main():
+    args = parse_args()
+    method = "stv" if args.method == "irv" else args.method
+    ballots, candidates = load_ballots(args)
 
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):

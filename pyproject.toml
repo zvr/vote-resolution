@@ -57,3 +57,6 @@ split-on-trailing-comma = false
 [tool.ruff.lint.mccabe]
 max-complexity = 12
 
+[tool.ruff.lint.pylint]
+max-locals = 20
+
