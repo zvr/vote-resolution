@@ -235,9 +235,10 @@ def main():
     parser.add_argument("file", nargs="?", default="-",
                         help="votes file, one 'Voter: a, b, c' per line "
                              "(default or '-': standard input)")
-    parser.add_argument("-m", "--method", choices=["schulze", "stv", "irv"],
+    parser.add_argument("-m", "--method", choices=["schulze", "stv", "irv", "all"],
                         default="schulze",
-                        help="counting method (default: schulze; irv is an alias of stv)")
+                        help="counting method (default: schulze; irv is an alias of stv; "
+                             "all runs every method and summarizes)")
     parser.add_argument("-n", "--seats", type=int, default=1, metavar="N",
                         help="number of winners to elect (default: 1)")
     parser.add_argument("-p", "--progress", action="store_true",
@@ -293,8 +294,13 @@ def main():
 
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        winners = report(args, method, ballots, candidates)
-    text = "".join(f"{w}\n" for w in winners) if args.quiet else buf.getvalue()
+        results = report(args, method, ballots, candidates)
+    if not args.quiet:
+        text = buf.getvalue()
+    elif method == "all":
+        text = "".join(f"{m}: {', '.join(w)}\n" for m, w in results.items())
+    else:
+        text = "".join(f"{w}\n" for w in results[method])
     if args.output:
         try:
             with open(args.output, "w", encoding="utf-8") as f:
@@ -306,7 +312,7 @@ def main():
 
 
 def report(args, method, ballots, candidates):
-    """Print the full report to stdout and return the winners."""
+    """Print the full report to stdout; return {method: winners}."""
     print("=== Statistics ===")
     print(f"Voters:     {len(ballots)}")
     print(f"Choices:    {len(candidates)} ({', '.join(candidates)})")
@@ -323,41 +329,61 @@ def report(args, method, ballots, candidates):
     print("\n=== Head-to-head (row preferred over column) ===")
     print_matrix(candidates, d)
 
-    tb = TieBreaker({a: sum(d[a].values()) for a in candidates}, args.seed)
+    results = {}
+    for m in ("schulze", "stv") if method == "all" else (method,):
+        # a fresh tie-breaker per method keeps seeded draws reproducible
+        tb = TieBreaker({a: sum(d[a].values()) for a in candidates}, args.seed)
+        if m == "schulze":
+            results[m] = run_schulze(args, d, candidates, tb)
+        else:
+            results[m] = run_stv(args, ballots, candidates, tb)
+    if method == "all":
+        print("\n=== Summary ===")
+        for m, winners in results.items():
+            print(f"{m:<8} {', '.join(winners)}")
+    return results
 
-    if method == "schulze":
-        tiers, paths = schulze(d, candidates)
-        if args.progress:
-            print("\n=== Progress (strongest paths, row to column) ===")
-            print_matrix(candidates, paths)
-        print("\n=== Result (Schulze method) ===")
-        place = 1
-        for tier in tiers:
-            print(f"{place}. {', '.join(tier)}" + (" (tie)" if len(tier) > 1 else ""))
-            place += len(tier)
-        winners = []
-        for tier in tiers:
-            need = args.seats - len(winners)
-            if len(tier) <= need:
-                winners += tier
-            else:
-                winners += tb.rank_tied(tier)[:need]
-                print(f"Tie for the last seat among {', '.join(tier)}: "
-                      f"broken by head-to-head score, then {tb.fallback}")
-            if len(winners) == args.seats:
-                break
-    else:
-        label = "instant-runoff" if args.seats == 1 else f"{args.seats}-seat"
-        if args.progress:
-            print(f"\n=== Progress ({label} rounds) ===")
-        winners = stv(ballots, candidates, args.seats, tb, args.progress)
-        print("\n=== Result (STV) ===")
 
+def run_schulze(args, d, candidates, tb):
+    tiers, paths = schulze(d, candidates)
+    if args.progress:
+        print("\n=== Progress (Schulze strongest paths, row to column) ===")
+        print_matrix(candidates, paths)
+    print("\n=== Result (Schulze method) ===")
+    place = 1
+    for tier in tiers:
+        print(f"{place}. {', '.join(tier)}" + (" (tie)" if len(tier) > 1 else ""))
+        place += len(tier)
+    winners = []
+    for tier in tiers:
+        need = args.seats - len(winners)
+        if len(tier) <= need:
+            winners += tier
+        else:
+            winners += tb.rank_tied(tier)[:need]
+            print(f"Tie for the last seat among {', '.join(tier)}: "
+                  f"broken by head-to-head score, then {tb.fallback}")
+        if len(winners) == args.seats:
+            break
+    print_winners(args, winners)
+    return winners
+
+
+def run_stv(args, ballots, candidates, tb):
+    label = "instant-runoff" if args.seats == 1 else f"{args.seats}-seat"
+    if args.progress:
+        print(f"\n=== Progress (STV {label} rounds) ===")
+    winners = stv(ballots, candidates, args.seats, tb, args.progress)
+    print("\n=== Result (STV) ===")
+    print_winners(args, winners)
+    return winners
+
+
+def print_winners(args, winners):
     if args.seats == 1:
         print(f"\nWinner: {winners[0]}")
     else:
         print(f"\nElected ({args.seats} seats): {', '.join(winners)}")
-    return winners
 
 
 if __name__ == "__main__":

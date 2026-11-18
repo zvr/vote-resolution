@@ -12,7 +12,7 @@ case-insensitive and whitespace-trimmed.
 
 | Option | Meaning |
 |---|---|
-| `-m, --method {schulze,stv,irv}` | Counting method (default `schulze`; `irv` is an alias of `stv`) |
+| `-m, --method {schulze,stv,irv,all}` | Counting method (default `schulze`; `irv` is an alias of `stv`; `all` runs every method and ends with a summary of the winners) |
 | `-n, --seats N` | Number of winners (default 1). Schulze takes the top N of its ranking; STV uses a Droop quota with fractional surplus transfers |
 | `-p, --progress` | Show the steps: STV rounds, or the Schulze strongest paths |
 | `-q, --quiet` | Print only the winner(s), one per line (overrides `-p`) |
