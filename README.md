@@ -15,6 +15,8 @@ case-insensitive and whitespace-trimmed.
 | `-m, --method {schulze,stv,irv}` | Counting method (default `schulze`; `irv` is an alias of `stv`) |
 | `-n, --seats N` | Number of winners (default 1). Schulze takes the top N of its ranking; STV uses a Droop quota with fractional surplus transfers |
 | `-p, --progress` | Show the steps: STV rounds, or the Schulze strongest paths |
+| `-q, --quiet` | Print only the winner(s), one per line (overrides `-p`) |
+| `-o, --output FILE` | Write the results to `FILE` instead of standard output |
 | `-s, --separator C` | Separator between choices (default `,`) |
 | `--seed N` | Random tie-breaking with this seed (default: alphabetical) |
 | `--case-sensitive` | Do not fold case when comparing names |

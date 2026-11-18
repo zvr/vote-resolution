@@ -17,6 +17,8 @@ Two counting methods are available:
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import argparse
+import contextlib
+import io
 import random
 import sys
 from collections import Counter
@@ -241,6 +243,10 @@ def main():
     parser.add_argument("-p", "--progress", action="store_true",
                         help="show the steps of the chosen method "
                              "(stv: the rounds; schulze: the strongest paths)")
+    parser.add_argument("-q", "--quiet", action="store_true",
+                        help="print only the winner(s), one per line (overrides -p)")
+    parser.add_argument("-o", "--output", metavar="FILE",
+                        help="write the results to FILE instead of standard output")
     parser.add_argument("-s", "--separator", default=",", metavar="C",
                         help="character separating choices on a line (default: ',')")
     parser.add_argument("--seed", type=int, metavar="N",
@@ -285,6 +291,22 @@ def main():
             if appearances[c] == 1:
                 warn(f"'{c}' appears on only one ballot (typo?)")
 
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        winners = report(args, method, ballots, candidates)
+    text = "".join(f"{w}\n" for w in winners) if args.quiet else buf.getvalue()
+    if args.output:
+        try:
+            with open(args.output, "w", encoding="utf-8") as f:
+                f.write(text)
+        except OSError as e:
+            sys.exit(f"error: {e}")
+    else:
+        sys.stdout.write(text)
+
+
+def report(args, method, ballots, candidates):
+    """Print the full report to stdout and return the winners."""
     print("=== Statistics ===")
     print(f"Voters:     {len(ballots)}")
     print(f"Choices:    {len(candidates)} ({', '.join(candidates)})")
@@ -335,6 +357,7 @@ def main():
         print(f"\nWinner: {winners[0]}")
     else:
         print(f"\nElected ({args.seats} seats): {', '.join(winners)}")
+    return winners
 
 
 if __name__ == "__main__":
