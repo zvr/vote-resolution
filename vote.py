@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+#
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
+
 """Tally preferential votes from a text file (or stdin).
 
 Each line has the form:  Voter: choice1, choice2, ...   (best to worst)
@@ -19,6 +25,7 @@ Two counting methods are available:
 import argparse
 import contextlib
 import io
+import pathlib
 import random
 import re
 import sys
@@ -42,6 +49,7 @@ def parse_votes(lines, source, sep=",", case_sensitive=False, lenient=False):
     spelling seen of a choice is used everywhere. Malformed lines are fatal
     unless lenient is set, in which case they are reported and skipped.
     """
+
     def problem(lineno, msg, action):
         if not lenient:
             sys.exit(f"error: {source}:{lineno}: {msg}")
@@ -73,8 +81,7 @@ def parse_votes(lines, source, sep=",", case_sensitive=False, lenient=False):
             if not key(raw):
                 continue
             if key(raw) in seen:
-                problem(lineno, f"'{clean(voter)}' lists '{clean(raw)}' more than once",
-                        "repeat ignored")
+                problem(lineno, f"'{clean(voter)}' lists '{clean(raw)}' more than once", "repeat ignored")
                 continue
             seen.add(key(raw))
             choices.append(spelling.setdefault(key(raw), clean(raw)))
@@ -85,7 +92,7 @@ def parse_votes(lines, source, sep=",", case_sensitive=False, lenient=False):
 
 def pairwise(ballots, candidates):
     """d[a][b] = number of voters who prefer a over b."""
-    d = {a: {b: 0 for b in candidates} for a in candidates}
+    d = {a: dict.fromkeys(candidates, 0) for a in candidates}
     for _, choices in ballots:
         rank = {c: i for i, c in enumerate(choices)}
         unranked = len(choices)
@@ -98,7 +105,7 @@ def pairwise(ballots, candidates):
 
 def schulze(d, candidates):
     """Return (tiers, strongest paths); tiers are lists of candidates, best first."""
-    p = {a: {b: 0 for b in candidates} for a in candidates}
+    p = {a: dict.fromkeys(candidates, 0) for a in candidates}
     for a in candidates:
         for b in candidates:
             if a != b and d[a][b] > d[b][a]:
@@ -111,8 +118,7 @@ def schulze(d, candidates):
                 if j == i or j == k:
                     continue
                 p[i][j] = max(p[i][j], min(p[i][k], p[k][j]))
-    wins = {a: sum(1 for b in candidates if a != b and p[a][b] > p[b][a])
-            for a in candidates}
+    wins = {a: sum(1 for b in candidates if a != b and p[a][b] > p[b][a]) for a in candidates}
     tiers = {}
     for a, w in wins.items():
         tiers.setdefault(w, []).append(a)
@@ -214,15 +220,18 @@ def stv(ballots, candidates, seats, tb, progress):
         quota = live / (seats_left + 1)
         if progress:
             heading(2, f"Round {rnd}")
-            print(f"{fmt(live)} live votes, {fmt(len(ballots) - live)} exhausted, "
-                  f"quota {fmt(quota)}, {seats_left} seat(s) left\n")
-            table(["Choice", "Votes"],
-                  [[esc(c), fmt(counts[c])]
-                   for c in sorted(counts, key=lambda c: (-counts[c], c))], "lr")
+            print(
+                f"{fmt(live)} live votes, {fmt(len(ballots) - live)} exhausted, "
+                f"quota {fmt(quota)}, {seats_left} seat(s) left\n"
+            )
+            table(
+                ["Choice", "Votes"],
+                [[esc(c), fmt(counts[c])] for c in sorted(counts, key=lambda c: (-counts[c], c))],
+                "lr",
+            )
         events = []
 
-        winners = sorted((c for c in hopeful if counts[c] > quota),
-                         key=lambda c: (-counts[c], c))
+        winners = sorted((c for c in hopeful if counts[c] > quota), key=lambda c: (-counts[c], c))
         if winners:
             for c in winners:
                 ratio = (counts[c] - quota) / counts[c]
@@ -231,8 +240,7 @@ def stv(ballots, candidates, seats, tb, progress):
                         weights[i] *= ratio
                 hopeful.remove(c)
                 elected.append(c)
-                events.append(f"**Elected:** {esc(c)} "
-                              f"(surplus {fmt(counts[c] - quota)} transferred)")
+                events.append(f"**Elected:** {esc(c)} (surplus {fmt(counts[c] - quota)} transferred)")
         elif len(hopeful) <= seats_left:
             rest = sorted(hopeful, key=lambda c: (-counts[c], c))
             elected.extend(rest)
@@ -241,8 +249,7 @@ def stv(ballots, candidates, seats, tb, progress):
             low = min(counts.values())
             tied = [c for c in counts if counts[c] == low]
             out, reason = tb.pick_lowest(tied, history)
-            note = (f" (tie among {names(sorted(tied))}, broken by {reason})"
-                    if len(tied) > 1 else "")
+            note = f" (tie among {names(sorted(tied))}, broken by {reason})" if len(tied) > 1 else ""
             events.append(f"**Eliminated:** {esc(out)}{note}")
             hopeful.remove(out)
         if progress:
@@ -252,39 +259,54 @@ def stv(ballots, candidates, seats, tb, progress):
 
 
 def print_matrix(candidates, m):
-    table([""] + [esc(c) for c in candidates],
-          [[f"**{esc(a)}**"] + ["-" if a == b else m[a][b] for b in candidates]
-           for a in candidates],
-          "l" + "r" * len(candidates))
+    table(
+        [""] + [esc(c) for c in candidates],
+        [[f"**{esc(a)}**"] + ["-" if a == b else m[a][b] for b in candidates] for a in candidates],
+        "l" + "r" * len(candidates),
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(description="Tally preferential votes.")
-    parser.add_argument("file", nargs="?", default="-",
-                        help="votes file, one 'Voter: a, b, c' per line "
-                             "(default or '-': standard input)")
-    parser.add_argument("-m", "--method", choices=["schulze", "stv", "irv", "all"],
-                        default="schulze",
-                        help="counting method (default: schulze; irv is an alias of stv; "
-                             "all runs every method and summarizes)")
-    parser.add_argument("-n", "--seats", type=int, default=1, metavar="N",
-                        help="number of winners to elect (default: 1)")
-    parser.add_argument("-p", "--progress", action="store_true",
-                        help="show the steps of the chosen method "
-                             "(stv: the rounds; schulze: the strongest paths)")
-    parser.add_argument("-q", "--quiet", action="store_true",
-                        help="print only the winner(s), one per line (overrides -p)")
-    parser.add_argument("-o", "--output", metavar="FILE",
-                        help="write the results to FILE instead of standard output")
-    parser.add_argument("-s", "--separator", default=",", metavar="C",
-                        help="character separating choices on a line (default: ',')")
-    parser.add_argument("--seed", type=int, metavar="N",
-                        help="seed for random tie-breaking "
-                             "(default: break remaining ties alphabetically)")
-    parser.add_argument("--case-sensitive", action="store_true",
-                        help="treat names that differ only in case as different")
-    parser.add_argument("--lenient", action="store_true",
-                        help="warn about and skip malformed lines instead of exiting")
+    parser.add_argument(
+        "file",
+        nargs="?",
+        default="-",
+        help="votes file, one 'Voter: a, b, c' per line (default or '-': standard input)",
+    )
+    parser.add_argument(
+        "-m",
+        "--method",
+        choices=["schulze", "stv", "irv", "all"],
+        default="schulze",
+        help="counting method (default: schulze; irv is an alias of stv; all runs every method and summarizes)",
+    )
+    parser.add_argument(
+        "-n", "--seats", type=int, default=1, metavar="N", help="number of winners to elect (default: 1)"
+    )
+    parser.add_argument(
+        "-p",
+        "--progress",
+        action="store_true",
+        help="show the steps of the chosen method (stv: the rounds; schulze: the strongest paths)",
+    )
+    parser.add_argument(
+        "-q", "--quiet", action="store_true", help="print only the winner(s), one per line (overrides -p)"
+    )
+    parser.add_argument("-o", "--output", metavar="FILE", help="write the results to FILE instead of standard output")
+    parser.add_argument(
+        "-s", "--separator", default=",", metavar="C", help="character separating choices on a line (default: ',')"
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        metavar="N",
+        help="seed for random tie-breaking (default: break remaining ties alphabetically)",
+    )
+    parser.add_argument(
+        "--case-sensitive", action="store_true", help="treat names that differ only in case as different"
+    )
+    parser.add_argument("--lenient", action="store_true", help="warn about and skip malformed lines instead of exiting")
     args = parser.parse_args()
     if len(args.separator) != 1 or args.separator == ":":
         parser.error("separator must be a single character other than ':'")
@@ -295,13 +317,11 @@ def main():
     if args.file == "-":
         if sys.stdin.isatty():
             parser.error("no input file given and standard input is a terminal")
-        ballots = parse_votes(sys.stdin, "<stdin>", args.separator,
-                              args.case_sensitive, args.lenient)
+        ballots = parse_votes(sys.stdin, "<stdin>", args.separator, args.case_sensitive, args.lenient)
     else:
         try:
-            with open(args.file, encoding="utf-8") as f:
-                ballots = parse_votes(f, args.file, args.separator,
-                                      args.case_sensitive, args.lenient)
+            with pathlib.Path(args.file).open(encoding="utf-8") as f:
+                ballots = parse_votes(f, args.file, args.separator, args.case_sensitive, args.lenient)
         except OSError as e:
             sys.exit(f"error: {e}")
     if not ballots:
@@ -311,8 +331,7 @@ def main():
     if not candidates:
         sys.exit("error: no choices found")
     if args.seats > len(candidates):
-        sys.exit(f"error: {args.seats} seats requested but only "
-                 f"{len(candidates)} choices")
+        sys.exit(f"error: {args.seats} seats requested but only {len(candidates)} choices")
 
     appearances = Counter(c for _, ch in ballots for c in ch)
     if len(ballots) > 1:
@@ -331,8 +350,7 @@ def main():
         text = "".join(f"{w}\n" for w in results[method])
     if args.output:
         try:
-            with open(args.output, "w", encoding="utf-8") as f:
-                f.write(text)
+            pathlib.Path(args.output).write_text(text, encoding="utf-8")
         except OSError as e:
             sys.exit(f"error: {e}")
     else:
@@ -350,9 +368,7 @@ def report(args, method, ballots, candidates):
 
     firsts = Counter(ch[0] for _, ch in ballots if ch)
     heading(1, "First-choice votes")
-    table(["Choice", "Votes"],
-          [[esc(c), firsts[c]]
-           for c in sorted(candidates, key=lambda c: (-firsts[c], c))], "lr")
+    table(["Choice", "Votes"], [[esc(c), firsts[c]] for c in sorted(candidates, key=lambda c: (-firsts[c], c))], "lr")
 
     d = pairwise(ballots, candidates)
     heading(1, "Head-to-head (row preferred over column)")
@@ -368,8 +384,7 @@ def report(args, method, ballots, candidates):
             results[m] = run_stv(args, ballots, candidates, tb)
     if method == "all":
         heading(1, "Summary")
-        table(["Method", "Winner(s)"],
-              [[m, names(winners)] for m, winners in results.items()])
+        table(["Method", "Winner(s)"], [[m, names(winners)] for m, winners in results.items()])
     return results
 
 
@@ -391,8 +406,7 @@ def run_schulze(args, d, candidates, tb):
             winners += tier
         else:
             winners += tb.rank_tied(tier)[:need]
-            print(f"Tie for the last seat among {names(tier)}: "
-                  f"broken by head-to-head score, then {tb.fallback}.\n")
+            print(f"Tie for the last seat among {names(tier)}: broken by head-to-head score, then {tb.fallback}.\n")
         if len(winners) == args.seats:
             break
     print_winners(args, winners)
