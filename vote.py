@@ -5,22 +5,24 @@
 # dependencies = []
 # ///
 
+# Copyright (C) 2026, Alexios Zavras
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Tally preferential votes from a text file (or stdin).
 
 Each line has the form:  Voter: choice1, choice2, ...   (best to worst)
-Blank lines and lines starting with '#' are ignored. Choices left off a
-ballot are treated as ranked below all the choices that appear on it.
+Blank lines and lines starting with '#' are ignored.
+Choices left off a ballot are treated as ranked
+below all the choices that appear on it.
 
 Two counting methods are available:
-  schulze  a Condorcet method (default); with several seats, the top N of
-           the Schulze ranking are elected.
-  stv      single transferable vote with a Droop quota and fractional
-           (Gregory) surplus transfers. With one seat this is the
-           instant-runoff method ('irv' is accepted as an alias).
+  schulze  a Condorcet method (default).  With several seats,
+           the top N of the Schulze ranking are elected.
+  stv      single transferable vote with a Droop quota and
+           fractional (Gregory) surplus transfers.  With one seat
+           this is the instant-runoff method.
+           'irv' is accepted as an alias.
 """
-
-# Copyright (C) 2026, Alexios Zavras
-# SPDX-License-Identifier: GPL-3.0-or-later
 
 import argparse
 import contextlib
@@ -128,9 +130,9 @@ def schulze(d, candidates):
 class TieBreaker:
     """Deterministic tie-breaking.
 
-    Ties are resolved by earlier rounds (for eliminations), then by the
-    head-to-head score (total number of pairwise preferences), and finally by
-    a random draw if a seed was given or by alphabetical order otherwise.
+    Ties are resolved by earlier rounds (for eliminations),
+    then by the head-to-head score (total number of pairwise preferences),
+    and finally by a random draw if a seed was given or by alphabetical order otherwise.
     """
 
     def __init__(self, strength, seed=None):
@@ -196,10 +198,11 @@ def table(headers, rows, align=None):
 def stv(ballots, candidates, seats, tb, progress):
     """Single transferable vote; returns the elected candidates in order.
 
-    Each round, every ballot counts for its highest-ranked hopeful choice. A
-    choice with more than live/(seats left + 1) votes is elected and its
-    surplus is passed on proportionally; if nobody qualifies, the weakest
-    choice is eliminated. With one seat this is instant-runoff voting.
+    Each round, every ballot counts for its highest-ranked hopeful choice.
+    A choice with more than live/(seats left + 1) votes is elected and
+    its surplus is passed on proportionally; if nobody qualifies,
+    the weakest choice is eliminated.
+    With one seat this is instant-runoff voting.
     """
     weights = [Fraction(1)] * len(ballots)
     hopeful = set(candidates)
