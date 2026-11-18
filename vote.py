@@ -220,7 +220,7 @@ def stv(ballots, candidates, seats, tb, progress):
         live = sum(counts.values())
         quota = live / (seats_left + 1)
         if progress:
-            heading(2, f"Round {rnd}")
+            heading(3, f"Round {rnd}")
             print(
                 f"{fmt(live)} live votes, {fmt(len(ballots) - live)} exhausted, "
                 f"quota {fmt(quota)}, {seats_left} seat(s) left\n"
@@ -403,9 +403,9 @@ def report(args, method, ballots, candidates):
 def run_schulze(args, d, candidates, tb):
     tiers, paths = schulze(d, candidates)
     if args.progress:
-        heading(1, "Progress (Schulze strongest paths, row to column)")
+        heading(2, "Progress (Schulze strongest paths, row to column)")
         print_matrix(candidates, paths)
-    heading(1, "Result (Schulze method)")
+    heading(2, "Result (Schulze method)")
     place = 1
     for tier in tiers:
         print(f"- **{place}.** {names(tier)}" + (" (tie)" if len(tier) > 1 else ""))
@@ -428,9 +428,9 @@ def run_schulze(args, d, candidates, tb):
 def run_stv(args, ballots, candidates, tb):
     label = "instant-runoff" if args.seats == 1 else f"{args.seats}-seat"
     if args.progress:
-        heading(1, f"Progress (STV {label} rounds)")
+        heading(2, f"Progress (STV {label} rounds)")
     winners = stv(ballots, candidates, args.seats, tb, args.progress)
-    heading(1, "Result (STV)")
+    heading(2, "Result (STV)")
     print_winners(args, winners)
     return winners
 

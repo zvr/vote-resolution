@@ -18,21 +18,21 @@
 
 |  | Bavarian | Indian | Korean | Other |
 |:--|--:|--:|--:|--:|
-| **Bavarian** | - | 1 | 1 | 4 |
+| **Bavarian** | - | 1 | 2 | 4 |
 | **Indian** | 4 | - | 3 | 5 |
-| **Korean** | 4 | 2 | - | 5 |
+| **Korean** | 3 | 2 | - | 5 |
 | **Other** | 1 | 0 | 0 | - |
 
-# Progress (Schulze strongest paths, row to column)
+## Progress (Schulze strongest paths, row to column)
 
 |  | Bavarian | Indian | Korean | Other |
 |:--|--:|--:|--:|--:|
 | **Bavarian** | - | 0 | 0 | 4 |
 | **Indian** | 4 | - | 3 | 5 |
-| **Korean** | 4 | 0 | - | 5 |
+| **Korean** | 3 | 0 | - | 5 |
 | **Other** | 0 | 0 | 0 | - |
 
-# Result (Schulze method)
+## Result (Schulze method)
 
 - **1.** Indian
 - **2.** Korean
@@ -41,9 +41,9 @@
 
 **Winner:** Indian
 
-# Progress (STV instant-runoff rounds)
+## Progress (STV instant-runoff rounds)
 
-## Round 1
+### Round 1
 
 5 live votes, 0 exhausted, quota 2.50, 1 seat(s) left
 
@@ -56,7 +56,7 @@
 
 - **Eliminated:** Other
 
-## Round 2
+### Round 2
 
 5 live votes, 0 exhausted, quota 2.50, 1 seat(s) left
 
@@ -68,7 +68,7 @@
 
 - **Eliminated:** Bavarian
 
-## Round 3
+### Round 3
 
 5 live votes, 0 exhausted, quota 2.50, 1 seat(s) left
 
@@ -79,7 +79,7 @@
 
 - **Elected:** Indian (surplus 0.50 transferred)
 
-# Result (STV)
+## Result (STV)
 
 **Winner:** Indian
 
