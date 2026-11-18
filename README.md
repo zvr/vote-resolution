@@ -25,3 +25,5 @@ case-insensitive and whitespace-trimmed.
 Ties are broken by earlier rounds (eliminations), then by head-to-head score,
 then by random draw (with `--seed`) or alphabetical order. Choices that appear
 on only one ballot produce a warning on stderr, as they are likely typos.
+
+The report is written as Markdown (headings, lists and tables), so it can be saved with `-o report.md` and rendered directly. With `-q` the output is plain text.

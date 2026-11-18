@@ -20,6 +20,7 @@ import argparse
 import contextlib
 import io
 import random
+import re
 import sys
 from collections import Counter
 from fractions import Fraction
@@ -162,6 +163,29 @@ def fmt(x):
     return str(x.numerator) if x.denominator == 1 else f"{float(x):.2f}"
 
 
+def esc(text):
+    """Escape characters that are special in Markdown."""
+    return re.sub(r"([\\`*_|<>\[\]#])", r"\\\1", text)
+
+
+def names(items):
+    return ", ".join(esc(i) for i in items)
+
+
+def heading(level, text):
+    print(f"{'#' * level} {text}\n")
+
+
+def table(headers, rows, align=None):
+    """Print a Markdown table; align has one of 'l'/'r' per column."""
+    align = align or "l" * len(headers)
+    print("| " + " | ".join(headers) + " |")
+    print("|" + "|".join("--:" if a == "r" else ":--" for a in align) + "|")
+    for row in rows:
+        print("| " + " | ".join(str(cell) for cell in row) + " |")
+    print()
+
+
 def stv(ballots, candidates, seats, tb, progress):
     """Single transferable vote; returns the elected candidates in order.
 
@@ -175,7 +199,6 @@ def stv(ballots, candidates, seats, tb, progress):
     elected = []
     history = []
     rnd = 0
-    say = print if progress else (lambda *a: None)
     while len(elected) < seats:
         rnd += 1
         seats_left = seats - len(elected)
@@ -189,10 +212,14 @@ def stv(ballots, candidates, seats, tb, progress):
                     break
         live = sum(counts.values())
         quota = live / (seats_left + 1)
-        say(f"Round {rnd}: {fmt(live)} live votes, {fmt(len(ballots) - live)} "
-            f"exhausted, quota {fmt(quota)}, {seats_left} seat(s) left")
-        for c in sorted(counts, key=lambda c: (-counts[c], c)):
-            say(f"  {c:<20} {fmt(counts[c])}")
+        if progress:
+            heading(2, f"Round {rnd}")
+            print(f"{fmt(live)} live votes, {fmt(len(ballots) - live)} exhausted, "
+                  f"quota {fmt(quota)}, {seats_left} seat(s) left\n")
+            table(["Choice", "Votes"],
+                  [[esc(c), fmt(counts[c])]
+                   for c in sorted(counts, key=lambda c: (-counts[c], c))], "lr")
+        events = []
 
         winners = sorted((c for c in hopeful if counts[c] > quota),
                          key=lambda c: (-counts[c], c))
@@ -204,30 +231,31 @@ def stv(ballots, candidates, seats, tb, progress):
                         weights[i] *= ratio
                 hopeful.remove(c)
                 elected.append(c)
-                say(f"  -> elected: {c} (surplus {fmt(counts[c] - quota)} transferred)")
+                events.append(f"**Elected:** {esc(c)} "
+                              f"(surplus {fmt(counts[c] - quota)} transferred)")
         elif len(hopeful) <= seats_left:
             rest = sorted(hopeful, key=lambda c: (-counts[c], c))
             elected.extend(rest)
-            say(f"  -> remaining choices elected: {', '.join(rest)}")
-            break
+            events.append(f"**Remaining choices elected:** {names(rest)}")
         else:
             low = min(counts.values())
             tied = [c for c in counts if counts[c] == low]
             out, reason = tb.pick_lowest(tied, history)
-            note = (f" (tie among {', '.join(sorted(tied))}, broken by {reason})"
+            note = (f" (tie among {names(sorted(tied))}, broken by {reason})"
                     if len(tied) > 1 else "")
-            say(f"  -> eliminated: {out}{note}")
+            events.append(f"**Eliminated:** {esc(out)}{note}")
             hopeful.remove(out)
+        if progress:
+            print("\n".join(f"- {e}" for e in events) + "\n")
         history.append(counts)
     return elected
 
 
 def print_matrix(candidates, m):
-    width = max(len(c) for c in candidates) + 2
-    print(" " * width + "".join(f"{c[:width - 1]:>{width}}" for c in candidates))
-    for a in candidates:
-        print(f"{a:<{width}}" + "".join(
-            f"{'-' if a == b else m[a][b]:>{width}}" for b in candidates))
+    table([""] + [esc(c) for c in candidates],
+          [[f"**{esc(a)}**"] + ["-" if a == b else m[a][b] for b in candidates]
+           for a in candidates],
+          "l" + "r" * len(candidates))
 
 
 def main():
@@ -296,7 +324,7 @@ def main():
     with contextlib.redirect_stdout(buf):
         results = report(args, method, ballots, candidates)
     if not args.quiet:
-        text = buf.getvalue()
+        text = buf.getvalue().rstrip("\n") + "\n"
     elif method == "all":
         text = "".join(f"{m}: {', '.join(w)}\n" for m, w in results.items())
     else:
@@ -313,20 +341,21 @@ def main():
 
 def report(args, method, ballots, candidates):
     """Print the full report to stdout; return {method: winners}."""
-    print("=== Statistics ===")
-    print(f"Voters:     {len(ballots)}")
-    print(f"Choices:    {len(candidates)} ({', '.join(candidates)})")
+    print("# Statistics\n")
+    print(f"- **Voters:** {len(ballots)}")
+    print(f"- **Choices:** {len(candidates)} ({names(candidates)})")
     partial = sum(1 for _, ch in ballots if len(ch) < len(candidates))
-    print(f"Incomplete ballots: {partial}")
-    print(f"Seats:      {args.seats}")
+    print(f"- **Incomplete ballots:** {partial}")
+    print(f"- **Seats:** {args.seats}\n")
 
     firsts = Counter(ch[0] for _, ch in ballots if ch)
-    print("\n=== First-choice votes ===")
-    for c in sorted(candidates, key=lambda c: (-firsts[c], c)):
-        print(f"{c:<20} {firsts[c]}")
+    heading(1, "First-choice votes")
+    table(["Choice", "Votes"],
+          [[esc(c), firsts[c]]
+           for c in sorted(candidates, key=lambda c: (-firsts[c], c))], "lr")
 
     d = pairwise(ballots, candidates)
-    print("\n=== Head-to-head (row preferred over column) ===")
+    heading(1, "Head-to-head (row preferred over column)")
     print_matrix(candidates, d)
 
     results = {}
@@ -338,22 +367,23 @@ def report(args, method, ballots, candidates):
         else:
             results[m] = run_stv(args, ballots, candidates, tb)
     if method == "all":
-        print("\n=== Summary ===")
-        for m, winners in results.items():
-            print(f"{m:<8} {', '.join(winners)}")
+        heading(1, "Summary")
+        table(["Method", "Winner(s)"],
+              [[m, names(winners)] for m, winners in results.items()])
     return results
 
 
 def run_schulze(args, d, candidates, tb):
     tiers, paths = schulze(d, candidates)
     if args.progress:
-        print("\n=== Progress (Schulze strongest paths, row to column) ===")
+        heading(1, "Progress (Schulze strongest paths, row to column)")
         print_matrix(candidates, paths)
-    print("\n=== Result (Schulze method) ===")
+    heading(1, "Result (Schulze method)")
     place = 1
     for tier in tiers:
-        print(f"{place}. {', '.join(tier)}" + (" (tie)" if len(tier) > 1 else ""))
+        print(f"- **{place}.** {names(tier)}" + (" (tie)" if len(tier) > 1 else ""))
         place += len(tier)
+    print()
     winners = []
     for tier in tiers:
         need = args.seats - len(winners)
@@ -361,8 +391,8 @@ def run_schulze(args, d, candidates, tb):
             winners += tier
         else:
             winners += tb.rank_tied(tier)[:need]
-            print(f"Tie for the last seat among {', '.join(tier)}: "
-                  f"broken by head-to-head score, then {tb.fallback}")
+            print(f"Tie for the last seat among {names(tier)}: "
+                  f"broken by head-to-head score, then {tb.fallback}.\n")
         if len(winners) == args.seats:
             break
     print_winners(args, winners)
@@ -372,18 +402,18 @@ def run_schulze(args, d, candidates, tb):
 def run_stv(args, ballots, candidates, tb):
     label = "instant-runoff" if args.seats == 1 else f"{args.seats}-seat"
     if args.progress:
-        print(f"\n=== Progress (STV {label} rounds) ===")
+        heading(1, f"Progress (STV {label} rounds)")
     winners = stv(ballots, candidates, args.seats, tb, args.progress)
-    print("\n=== Result (STV) ===")
+    heading(1, "Result (STV)")
     print_winners(args, winners)
     return winners
 
 
 def print_winners(args, winners):
     if args.seats == 1:
-        print(f"\nWinner: {winners[0]}")
+        print(f"**Winner:** {names(winners)}\n")
     else:
-        print(f"\nElected ({args.seats} seats): {', '.join(winners)}")
+        print(f"**Elected ({args.seats} seats):** {names(winners)}\n")
 
 
 if __name__ == "__main__":
